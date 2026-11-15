@@ -161,6 +161,10 @@ codex login --device-auth   # open the URL elsewhere, sign in with ChatGPT, ente
 codex login status          # exits 0 when logged in
 ```
 
+A bare `codex login` — which is what CloudCLI's "Codex CLI Login" dialog runs
+— is turned into the same device-code flow: the browser flow would redirect to
+`127.0.0.1` on your own machine and never reach the container.
+
 Within 30 s `codex-rc` starts the app-server with remote control. Then:
 
 ```sh
