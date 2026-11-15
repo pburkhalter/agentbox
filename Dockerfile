@@ -23,6 +23,8 @@ RUN npm ci --no-audit --no-fund --no-update-notifier \
            node_modules/@nut-tree-fork \
            node_modules/screenshot-desktop \
  # Fails the build when an install script did not place a native binary.
+ # Chromium for CloudCLI's Browser Use, matching the pinned playwright package.
+ && PLAYWRIGHT_BROWSERS_PATH=/opt/agentbox/browsers node_modules/.bin/playwright install chromium \
  && node_modules/.bin/claude --version \
  && node_modules/.bin/codex --version \
  && node_modules/.bin/cloudcli --version
@@ -67,6 +69,14 @@ RUN apt-get update \
  && echo '[ -r /tmp/agentbox/nss.env ] && . /tmp/agentbox/nss.env' >>/etc/bash.bashrc
 
 COPY --from=tools /opt/agentbox /opt/agentbox
+
+# System libraries Chromium needs. Playwright carries the list for this Debian
+# release, so it stays in step with the pinned package.
+RUN apt-get update \
+ && /opt/agentbox/node_modules/.bin/playwright install-deps chromium \
+ && rm -rf /var/lib/apt/lists/* \
+ && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
+
 COPY rootfs/ /
 
 ENV HOME=/home/agent \
@@ -76,7 +86,8 @@ ENV HOME=/home/agent \
     CODEX_HOME=/home/agent/.codex \
     DISABLE_AUTOUPDATER=1 \
     DISABLE_UPDATES=1 \
-    NPM_CONFIG_UPDATE_NOTIFIER=false
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/agentbox/browsers
 
 LABEL org.opencontainers.image.title="agentbox" \
       org.opencontainers.image.description="Claude Code, Codex and CloudCLI as a supervised, non-root, always-on container" \
