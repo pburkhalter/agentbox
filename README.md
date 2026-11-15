@@ -244,6 +244,12 @@ What it does not do — the limits:
   forward it, use a VPN from outside, and put TLS in front if the LAN is not
   trusted. CloudCLI's plugin installer (`git clone` of any repository) and its
   "update" button are part of that surface; the update fails here by design.
+- **Browser Use gives the agents a real browser.** The image carries
+  Playwright and Chromium so CloudCLI's Browser tab works (its own installer
+  cannot run here: no root, read-only filesystem). Chromium runs headless,
+  without its own sandbox (as in any unprivileged container), with the same
+  network reach as the agents, and it executes whatever a page serves. Saved
+  browser profiles live in `~/.cloudcli/browser-use/` and hold cookies.
 - While Remote Control is on, conversation transcripts are stored by Anthropic
   and OpenAI respectively.
 - The image redistributes Claude Code (Anthropic's commercial terms), Codex

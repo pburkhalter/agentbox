@@ -100,6 +100,21 @@ check "CloudCLI is reachable through the published port" curl -fsS "http://127.0
 check "CloudCLI wants its first account (fresh database)" \
 	bash -c "docker exec $c curl -fsS http://127.0.0.1:3001/api/auth/status | jq -e '.needsSetup == true'"
 
+# CloudCLI's Browser Use: the same launch options it uses, in the hardened
+# container (read-only root, no capabilities, non-root).
+check "Chromium starts headless and loads a page (Browser Use runtime)" in_c \
+	'cd /opt/agentbox && node -e "
+const { chromium } = require(\"playwright\");
+(async () => {
+  if (!require(\"fs\").existsSync(chromium.executablePath())) throw new Error(\"no chromium\");
+  const b = await chromium.launch({ headless: true, args: [\"--disable-dev-shm-usage\"] });
+  const p = await b.newPage();
+  await p.goto(\"http://127.0.0.1:3001/health\");
+  const t = await p.textContent(\"body\");
+  await b.close();
+  if (!t.includes(\"ok\")) throw new Error(t);
+})().catch((e) => { console.error(e); process.exit(1); });"'
+
 check "home volume initialised (marker, config dirs)" in_c \
 	'test -s ~/.local/state/agentbox/initialized && test -d "$CLAUDE_CONFIG_DIR" && test -d "$CODEX_HOME" && test -f ~/.cloudcli/auth.db && test -f ~/.bashrc'
 check "home and ~/.ssh are private (0700)" test "$(in_c 'stat -c %a ~ ~/.ssh | sort -u')" = 700
