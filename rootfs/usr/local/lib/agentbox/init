@@ -1,0 +1,74 @@
+#!/bin/bash
+# PID 1 of the container. Checks the environment, prepares the two volumes
+# (a fresh, empty one works) and hands over to s6-svscan, which supervises
+# cloudcli, claude-rc and codex-rc and reaps orphaned processes.
+set -euo pipefail
+# shellcheck source=lib.sh
+. /usr/local/lib/agentbox/lib.sh
+
+[ "$(id -u)" -ne 0 ] || die "refusing to run as root; run as a normal UID (default 568:568)"
+
+# --- environment ------------------------------------------------------------
+
+# Each of these silently replaces the subscription login or routes Claude
+# away from api.anthropic.com, which turns Remote Control off.
+for var in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN \
+	ANTHROPIC_BASE_URL CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX \
+	CLAUDE_CODE_USE_FOUNDRY OPENAI_API_KEY CODEX_API_KEY; do
+	[ -z "${!var:-}" ] || die "$var is set. agentbox runs on subscription logins only; remove it from the container environment"
+done
+# CloudCLI skips its own login entirely in "platform" mode.
+[ "${VITE_IS_PLATFORM:-}" != true ] || die "VITE_IS_PLATFORM=true disables CloudCLI's login; remove it"
+for var in CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CODE_DISABLE_FEATURE_FLAGS DISABLE_GROWTHBOOK; do
+	[ -z "${!var:-}" ] || log "warning: $var is set; Claude Remote Control does not work with it"
+done
+
+mkdir -p "$AGENTBOX_RUNTIME"
+chmod 0700 "$AGENTBOX_RUNTIME"
+nss_setup
+
+for dir in "$HOME" /workspace; do
+	[ -d "$dir" ] && [ -w "$dir" ] ||
+		die "$dir is not writable by UID $(id -u):$(id -g); chown the volume to that UID or run with a matching user"
+done
+
+# --- home volume ------------------------------------------------------------
+# Idempotent: creates what is missing, never overwrites what is there.
+
+first_start=false
+state_dir=$HOME/.local/state/agentbox
+[ -e "$state_dir/initialized" ] || first_start=true
+
+[ -O "$HOME" ] && chmod 0700 "$HOME"
+(
+	umask 077
+	mkdir -p "$CLAUDE_CONFIG_DIR" "$CODEX_HOME" "$HOME/.cloudcli" "$HOME/.config/gh" \
+		"$HOME/.ssh" "$state_dir"
+)
+chmod 0700 "$HOME/.ssh"
+for f in .bashrc .profile; do
+	[ -e "$HOME/$f" ] || cp /etc/skel/$f "$HOME/$f"
+done
+
+if $first_start; then
+	date -u +%Y-%m-%dT%H:%M:%SZ >"$state_dir/initialized"
+	log "initialised a fresh home volume at $HOME"
+fi
+
+# --- services ---------------------------------------------------------------
+
+# s6 needs a writable service directory; the scripts stay on the image and
+# are linked, so a noexec /tmp (e.g. a read-only root with tmpfs) works.
+rm -rf "$AGENTBOX_SCANDIR"
+for src in /usr/local/lib/agentbox/services/*/; do
+	dst=$AGENTBOX_SCANDIR/$(basename "$src")
+	mkdir -p "$dst"
+	for f in "$src"*; do
+		if [ -x "$f" ]; then ln -s "$f" "$dst/"; else cp "$f" "$dst/"; fi
+	done
+done
+[ "${AGENTBOX_CLAUDE_RC:-1}" = 1 ] || { touch "$AGENTBOX_SCANDIR/claude-rc/down"; log "claude-rc disabled (AGENTBOX_CLAUDE_RC=${AGENTBOX_CLAUDE_RC})"; }
+[ "${AGENTBOX_CODEX_RC:-1}" = 1 ] || { touch "$AGENTBOX_SCANDIR/codex-rc/down"; log "codex-rc disabled (AGENTBOX_CODEX_RC=${AGENTBOX_CODEX_RC})"; }
+
+log "claude $(claude --version 2>/dev/null | cut -d' ' -f1), $(codex --version 2>/dev/null), cloudcli $(cloudcli --version 2>/dev/null)"
+exec s6-svscan "$AGENTBOX_SCANDIR"

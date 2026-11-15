@@ -1,0 +1,14 @@
+#!/bin/bash
+# CloudCLI web UI on port 3001. Its login database lives in the home volume.
+set -euo pipefail
+exec 2>&1
+cd /workspace
+
+export SERVER_PORT=3001
+export HOST=0.0.0.0
+export DATABASE_PATH=$HOME/.cloudcli/auth.db
+export WORKSPACES_ROOT=/workspace
+# Run the pinned CLI, not the binary bundled with CloudCLI's Agent SDK.
+export CLAUDE_CLI_PATH=/opt/agentbox/node_modules/.bin/claude
+
+exec cloudcli start --port "$SERVER_PORT"

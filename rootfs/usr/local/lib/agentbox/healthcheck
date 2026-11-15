@@ -1,0 +1,4 @@
+#!/bin/bash
+# Healthy when CloudCLI answers. claude-rc and codex-rc legitimately idle
+# until their logins exist, so they do not count; `agentbox status` shows them.
+exec curl -fsS --max-time 4 -o /dev/null http://127.0.0.1:3001/health

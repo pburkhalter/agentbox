@@ -1,0 +1,48 @@
+#!/bin/bash
+# Claude Code Remote Control in server mode, inside the tmux session "claude".
+#
+# Idles until `claude auth login` has been done. The first run after the
+# login asks questions (trust /workspace, enable Remote Control) that need a
+# terminal: answer them once with `agentbox attach`; Claude remembers them.
+set -uo pipefail
+# shellcheck disable=SC2034 # read by log() in lib.sh
+SVC=claude-rc
+# shellcheck source=../../lib.sh
+. /usr/local/lib/agentbox/lib.sh
+exec 2>&1
+
+session=claude
+target="=$session"
+exit_file=$AGENTBOX_RUNTIME/claude-rc.exit
+
+stop_session() {
+	tmux has-session -t "$target" 2>/dev/null || return 0
+	# Ctrl-C stops the server without archiving its sessions, so a restart
+	# within a few hours can bring them back.
+	tmux send-keys -t "$target:" C-c 2>/dev/null
+	for _ in $(seq 20); do
+		tmux has-session -t "$target" 2>/dev/null || return 0
+		sleep 0.5
+	done
+	tmux kill-session -t "$target" 2>/dev/null
+}
+trap 'stop_session; exit 0' TERM INT
+
+wait_for_login "Claude Code" "claude auth login" claude auth status
+
+if ! tmux has-session -t "$target" 2>/dev/null; then
+	dir=${CLAUDE_RC_DIR:-/workspace}
+	# Word-split on purpose: CLAUDE_RC_ARGS replaces the defaults.
+	read -r -a args <<<"${CLAUDE_RC_ARGS:---spawn same-dir --permission-mode default}"
+	rm -f "$exit_file"
+	tmux new-session -d -s "$session" -c "$dir" -x 120 -y 40 \
+		/usr/local/lib/agentbox/claude-rc-session "${args[@]}" ||
+		{ log "could not start tmux"; sleep 10; exit 1; }
+	log "claude remote-control started in $dir (tmux session '$session'; first run needs answers: agentbox attach)"
+fi
+
+while tmux has-session -t "$target" 2>/dev/null; do
+	sleep 5 &
+	wait $!
+done
+log "claude remote-control ended (exit status $(cat "$exit_file" 2>/dev/null || echo unknown)); restarting"

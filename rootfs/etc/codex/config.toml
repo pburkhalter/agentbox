@@ -1,0 +1,16 @@
+# agentbox defaults for Codex. ~/.codex/config.toml overrides any of them.
+
+# The image is the only source of Codex updates.
+check_for_update_on_startup = false
+
+# Codex's Linux sandbox needs bubblewrap to create user namespaces, which
+# Docker's default seccomp profile forbids. Inside agentbox the container is
+# the sandbox, so commands run without Codex's own; approvals still apply.
+sandbox_mode = "danger-full-access"
+approval_policy = "on-request"
+
+[features]
+# The supervised app-server (service codex-rc) is the shared server. Without
+# this, an interactive `codex` would install its own self-updating daemon
+# copy into $CODEX_HOME when that server is not running.
+daemon_auto_start = false

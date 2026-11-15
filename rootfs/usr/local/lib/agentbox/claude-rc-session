@@ -1,0 +1,9 @@
+#!/bin/bash
+# Runs inside the tmux session "claude": one `claude remote-control` server.
+# Records its exit status for the supervisor and pauses before the session
+# closes, which is both the restart back-off and time to read the error.
+claude remote-control "$@"
+status=$?
+echo "$status" >"${AGENTBOX_RUNTIME:-/tmp/agentbox}/claude-rc.exit"
+printf '\n[agentbox] claude remote-control exited with status %s; restarting in 10 s.\n' "$status"
+sleep 10

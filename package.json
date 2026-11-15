@@ -1,0 +1,14 @@
+{
+  "name": "agentbox-tools",
+  "private": true,
+  "description": "The CLIs baked into the agentbox image. Exact versions on purpose: Dependabot bumps them, CI tests them, the image is the only way they change.",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.324",
+    "@cloudcli-ai/cloudcli": "1.37.8",
+    "@openai/codex": "0.169.0"
+  },
+  "overrides": {
+    "@openai/codex": "$@openai/codex"
+  }
+}

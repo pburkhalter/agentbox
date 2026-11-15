@@ -1,0 +1,3 @@
+# Scripts source lib.sh by its in-image path; resolve it next to them.
+source-path=SCRIPTDIR
+external-sources=true

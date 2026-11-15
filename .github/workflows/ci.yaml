@@ -1,0 +1,108 @@
+name: ci
+
+# Pull requests, and every release run through workflow_call: an image is
+# only published after exactly these checks passed.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+      - name: shellcheck
+        run: |
+          mapfile -t scripts < <(grep -rlE '^#!/(usr/)?bin/(env )?(ba)?sh|^# shellcheck shell=' rootfs test)
+          shellcheck --version | head -2
+          shellcheck -x "${scripts[@]}"
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The weekly rebuild skips the cache so `apt-get upgrade` runs again;
+      # the release job then reuses the layers this build exported.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: agentbox:ci
+          no-cache: ${{ github.event_name == 'schedule' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: smoke test
+        run: test/smoke.sh agentbox:ci
+
+      - id: scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: agentbox:ci
+          fail-build: false
+          output-format: json
+
+      # Fails on critical findings that have a fix; everything else is only
+      # reported. Accepted findings go into .grype.yaml (ignore list).
+      - name: vulnerability report
+        env:
+          REPORT: ${{ steps.scan.outputs.json }}
+        run: |
+          {
+            echo "## Vulnerabilities (grype)"
+            echo
+            echo "| severity | fix available | no fix |"
+            echo "|---|---|---|"
+            jq -r '[.matches[].vulnerability] as $v
+              | ["Critical","High","Medium","Low","Negligible","Unknown"][] as $s
+              | "| \($s) | \([$v[] | select(.severity == $s and .fix.state == "fixed")] | length) | \([$v[] | select(.severity == $s and .fix.state != "fixed")] | length) |"' "$REPORT"
+            echo
+            echo "Fixable critical and high findings:"
+            echo
+            echo "| severity | package | installed | fixed in | id | path |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.matches[] | select(.vulnerability.fix.state == "fixed" and (.vulnerability.severity == "Critical" or .vulnerability.severity == "High"))
+              | "| \(.vulnerability.severity) | \(.artifact.name) | \(.artifact.version) | \(.vulnerability.fix.versions | join(", ")) | \(.vulnerability.id) | \(.artifact.locations[0].path) |"' "$REPORT"
+          } >>"$GITHUB_STEP_SUMMARY"
+          critical=$(jq '[.matches[] | select(.vulnerability.severity == "Critical" and .vulnerability.fix.state == "fixed")] | length' "$REPORT")
+          echo "fixable critical findings: $critical"
+          test "$critical" -eq 0
+
+  # Dependabot patch and minor updates merge themselves once lint and image
+  # passed in this very run, then trigger the release. A merge made with
+  # GITHUB_TOKEN does not fire the push event, so the release is dispatched.
+  # Majors stay open for a human.
+  automerge:
+    needs: [lint, image]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        run: |
+          echo "merging $PR_URL ($UPDATE_TYPE)"
+          # Only the commit this run tested; a rebase in between waits for its own run.
+          gh pr merge --squash --delete-branch --match-head-commit "$HEAD_SHA" "$PR_URL"
+          gh workflow run release.yaml --ref main

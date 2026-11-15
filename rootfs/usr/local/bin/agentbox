@@ -1,0 +1,51 @@
+#!/bin/bash
+# Small front end for the things one does inside the container.
+set -uo pipefail
+# shellcheck source=../lib/agentbox/lib.sh
+. /usr/local/lib/agentbox/lib.sh
+
+services=(cloudcli claude-rc codex-rc)
+
+usage() {
+	cat <<-EOF
+		usage: agentbox COMMAND
+
+		  status            versions, logins and services
+		  attach            attach to Claude Remote Control (detach: Ctrl-b d)
+		  pair              print a Codex pairing code for the ChatGPT app
+		  restart SERVICE   restart one of: ${services[*]}
+	EOF
+}
+
+login_state() {
+	if "$@" >/dev/null 2>&1; then echo "logged in"; else echo "not logged in"; fi
+}
+
+case "${1:-}" in
+status)
+	echo "claude   $(claude --version 2>/dev/null)  ($(login_state claude auth status))"
+	echo "codex    $(codex --version 2>/dev/null)  ($(login_state codex login status))"
+	echo "cloudcli $(cloudcli --version 2>/dev/null)"
+	echo "gh       $(gh --version 2>/dev/null | head -1)  ($(login_state gh auth status))"
+	echo
+	for s in "${services[@]}"; do
+		printf '%-10s %s\n' "$s" "$(s6-svstat "$AGENTBOX_SCANDIR/$s" 2>&1)"
+	done
+	echo
+	tmux ls 2>/dev/null || echo "no tmux sessions"
+	;;
+attach)
+	exec tmux attach -t =claude
+	;;
+pair)
+	exec codex remote-control pair
+	;;
+restart)
+	[[ " ${services[*]} " == *" ${2:-} "* ]] || { usage; exit 2; }
+	exec s6-svc -r "$AGENTBOX_SCANDIR/$2"
+	;;
+*)
+	usage
+	[ -z "${1:-}" ] || exit 2
+	;;
+esac

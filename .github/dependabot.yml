@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # The three CLIs. Patch and minor updates arrive as one PR a week and
+  # merge themselves when CI is green (ci.yaml, job automerge).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      cli-tools:
+        update-types: [minor, patch]
+
+  # Base image tag and digest.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    ignore:
+      # Node LTS lines only; moving to the next one (28) is a deliberate change.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        update-types: [minor, patch]

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Codex remote control: the app-server with remote control on, in the
+# foreground, listening on the default control socket in $CODEX_HOME.
+#
+# This is the process `codex remote-control start` would launch as a detached
+# daemon. That daemon first copies the CLI (~400 MB) into $CODEX_HOME and
+# runs a self-updater; here the image's binary runs under the supervisor, so
+# an image update is the only way it changes. `codex remote-control pair`
+# talks to the same socket.
+set -uo pipefail
+# shellcheck disable=SC2034 # read by log() in lib.sh
+SVC=codex-rc
+# shellcheck source=../../lib.sh
+. /usr/local/lib/agentbox/lib.sh
+exec 2>&1
+
+wait_for_login "Codex" "codex login --device-auth" codex login status
+
+log "starting the Codex app-server with remote control (pair a phone: agentbox pair)"
+exec codex app-server --remote-control --listen unix://

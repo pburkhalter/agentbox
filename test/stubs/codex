@@ -1,0 +1,11 @@
+#!/bin/bash
+# Test stand-in: reports a login, and `app-server` just stays up.
+if [ "${1:-} ${2:-}" = "login status" ]; then
+	echo "Logged in using ChatGPT"
+	exit 0
+fi
+if [ "${1:-}" = app-server ]; then
+	echo "stub codex $*"
+	exec sleep infinity
+fi
+exec /opt/agentbox/node_modules/.bin/codex "$@"

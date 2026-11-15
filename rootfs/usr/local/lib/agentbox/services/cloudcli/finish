@@ -1,0 +1,4 @@
+#!/bin/sh
+# s6 passes the exit code ($1, 256 when killed by a signal). Back off after a
+# failure so a broken login or network does not turn into a restart storm.
+[ "$1" = 0 ] || [ "$1" = 256 ] || sleep 10

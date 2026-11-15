@@ -1,0 +1,31 @@
+# agentbox as a compose stack or TrueNAS custom app. Adjust the address and
+# the two host paths; both directories must belong to the user below.
+services:
+  agentbox:
+    image: ghcr.io/pburkhalter/agentbox:latest
+    container_name: agentbox
+    # Shown as the machine name in the Claude and ChatGPT apps.
+    hostname: agentbox
+    restart: unless-stopped
+    user: "568:568" # TrueNAS apps user
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # Lets claude-rc stop Remote Control with Ctrl-C (its sessions stay resumable).
+    stop_grace_period: 30s
+    ports:
+      # CloudCLI includes a web shell. Bind it to the LAN address only, never
+      # forward it on the router; from outside use a VPN such as Tailscale.
+      - "192.168.1.10:3001:3001"
+    volumes:
+      - /mnt/tank/apps/agentbox/home:/home/agent # logins and tool config
+      - /mnt/tank/apps/agentbox/workspace:/workspace # repositories
+    # Optional, defaults shown:
+    # environment:
+    #   CLAUDE_RC_DIR: /workspace
+    #   CLAUDE_RC_ARGS: "--spawn same-dir --permission-mode default"
+    #   AGENTBOX_CLAUDE_RC: "1" # 0 = no Claude Remote Control service
+    #   AGENTBOX_CODEX_RC: "1"  # 0 = no Codex remote control service
