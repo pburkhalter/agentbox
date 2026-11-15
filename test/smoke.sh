@@ -108,7 +108,8 @@ check "managed settings force claude.ai login and disable bypass mode" in_c \
 	'jq -e ".forceLoginMethod == \"claudeai\" and .permissions.disableBypassPermissionsMode == \"disable\"" /etc/claude-code/managed-settings.json'
 check "codex update check is off and no daemon auto-start" in_c \
 	'grep -qx "check_for_update_on_startup = false" /etc/codex/config.toml && codex features list | grep -Eq "^daemon_auto_start +[a-z]+ +false$"'
-check "CLI install tree is not writable by the agent" in_c '! test -w /opt/agentbox/node_modules/.bin'
+check "CLI install tree and npm's global prefix are not writable (no self-update)" in_c \
+	'! test -w /opt/agentbox/node_modules/.bin && ! test -w /usr/local/lib/node_modules'
 check "codex app-server accepts --remote-control (used by codex-rc)" in_c \
 	'codex app-server --remote-control --listen unix:///tmp/smoke.sock >/dev/null 2>&1 & p=$!; sleep 4; kill -0 $p && kill $p'
 
