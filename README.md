@@ -75,6 +75,50 @@ The container refuses to start with `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
 `OPENAI_API_KEY` or `CODEX_API_KEY` set: each would silently replace a
 subscription login, and Remote Control needs the subscription login.
 
+### Tailscale sidecar (optional)
+
+To let the agents reach hosts in a tailnet (and to reach CloudCLI over it)
+without giving the container any privilege, run `tailscale/tailscale` next to
+it in userspace mode and share its network namespace:
+
+```yaml
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: agentbox
+    user: "568:568"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      TS_HOSTNAME: agentbox
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /tmp/tailscaled.sock
+      TS_SOCKS5_SERVER: 127.0.0.1:1055
+      TS_OUTBOUND_HTTP_PROXY_LISTEN: 127.0.0.1:1055
+      TS_AUTH_ONCE: "true"
+      # TS_AUTHKEY: tskey-auth-...   # first start only, then remove
+    ports: ["192.168.1.10:3001:3001"] # the published port moves here
+    volumes:
+      - /mnt/tank/apps/agentbox/tailscale:/var/lib/tailscale
+  agentbox:
+    network_mode: service:tailscale
+    depends_on: [tailscale]
+    # ...as above, without hostname and ports
+```
+
+Inside the container nothing changes for ordinary traffic. Tailnet hosts go
+through the proxy on `127.0.0.1:1055`:
+
+- `ssh` does it by itself for `*.ts.net` names and `100.64.0.0/10` addresses
+  (`/etc/ssh/ssh_config.d/10-tailnet.conf`), and so does `git` over SSH
+- anything else per call: `curl --proxy socks5h://127.0.0.1:1055 http://host:8080/`
+
+Give the node a tag and let the tailnet ACL decide what it may reach; the
+agents can use whatever that tag allows.
+
 ## First login
 
 Do these in order, once. Logins survive restarts and image updates because they

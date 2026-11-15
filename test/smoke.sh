@@ -87,6 +87,8 @@ check "cloudcli prints the pinned version" test "$(in_c 'cloudcli --version')" =
 check "CloudCLI resolves the same codex" test "$(in_c "node -p \"require(require.resolve('@openai/codex/package.json', {paths: ['/opt/agentbox/node_modules/@cloudcli-ai/cloudcli']})).version\"")" = "$(pinned @openai/codex)"
 check "git, gh, ssh, tmux, rg, jq, curl, python3 present" \
 	in_c 'git --version && gh --version && ssh -V && tmux -V && rg --version && jq --version && curl --version && python3 --version'
+check "ssh sends tailnet hosts through the sidecar proxy, others direct" in_c \
+	'command -v nc && ssh -G 100.68.1.2 | grep -qx "proxycommand nc -X 5 -x 127.0.0.1:1055 %h %p" && ssh -G box.example.ts.net | grep -q "^proxycommand nc" && ! ssh -G github.com | grep -q "^proxycommand" && ssh -G 100.127.9.9 | grep -q "^proxycommand nc" && ! ssh -G 100.63.2.3 | grep -q "^proxycommand" && ! ssh -G 100.128.2.3 | grep -q "^proxycommand"'
 check "node is the LTS line 26" bash -c "docker exec $c node --version | grep -q '^v26\.'"
 
 health=$(in_c 'curl -fsS http://127.0.0.1:3001/health' || true)

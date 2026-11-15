@@ -43,8 +43,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq less libnss-wrapper openssh-client procps \
-      python3 ripgrep s6 tmux \
+      ca-certificates curl git jq less libnss-wrapper netcat-openbsd \
+      openssh-client procps python3 ripgrep s6 tmux \
  && curl -fsSLo /usr/share/keyrings/githubcli-archive-keyring.gpg \
       https://cli.github.com/packages/githubcli-archive-keyring.gpg \
  && echo "${GH_KEYRING_SHA256}  /usr/share/keyrings/githubcli-archive-keyring.gpg" | sha256sum -c - \
