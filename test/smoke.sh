@@ -83,6 +83,8 @@ check "claude prints the pinned version" \
 	bash -c "docker exec $c claude --version | grep -q '^$(pinned @anthropic-ai/claude-code) '"
 check "codex prints the pinned version" \
 	test "$(in_c 'codex --version')" = "codex-cli $(pinned @openai/codex)"
+check "bare 'codex login' becomes the device-code flow, everything else passes through" in_c \
+	'export AGENTBOX_CODEX_BIN=/bin/echo; test "$(codex login)" = "login --device-auth" && test "$(codex login --with-api-key)" = "login --with-api-key" && test "$(codex login status)" = "login status" && test "$(codex exec "a b")" = "exec a b"'
 check "cloudcli prints the pinned version" test "$(in_c 'cloudcli --version')" = "$(pinned @cloudcli-ai/cloudcli)"
 check "CloudCLI resolves the same codex" test "$(in_c "node -p \"require(require.resolve('@openai/codex/package.json', {paths: ['/opt/agentbox/node_modules/@cloudcli-ai/cloudcli']})).version\"")" = "$(pinned @openai/codex)"
 check "git, gh, ssh, tmux, rg, jq, curl, python3 present" \

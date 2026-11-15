@@ -70,7 +70,7 @@ COPY --from=tools /opt/agentbox /opt/agentbox
 COPY rootfs/ /
 
 ENV HOME=/home/agent \
-    PATH=/opt/agentbox/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    PATH=/usr/local/lib/agentbox/bin:/opt/agentbox/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     LANG=C.UTF-8 \
     CLAUDE_CONFIG_DIR=/home/agent/.claude \
     CODEX_HOME=/home/agent/.codex \

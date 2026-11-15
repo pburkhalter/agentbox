@@ -1,0 +1,13 @@
+#!/bin/bash
+# First in PATH, in front of the pinned Codex CLI.
+#
+# A bare `codex login` starts a browser flow that ends with a redirect to
+# 127.0.0.1:1455 — the browser's own machine, not this container, so it can
+# never complete here. CloudCLI's "Codex CLI Login" dialog runs exactly that
+# command. Turn it into the device-code flow, which needs no callback. Every
+# other invocation, including `codex login` with any option, passes through.
+real=${AGENTBOX_CODEX_BIN:-/opt/agentbox/node_modules/.bin/codex}
+if [ "$#" -eq 1 ] && [ "$1" = login ]; then
+	exec "$real" login --device-auth
+fi
+exec "$real" "$@"
