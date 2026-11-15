@@ -209,9 +209,12 @@ check is off, the install tree is read-only for the agent user. The image is
 the single source of truth:
 
 1. **Dependabot** checks weekly: the three CLIs (`package.json` with exact
-   versions + lockfile; patch and minor updates come as one grouped PR), the
+   versions + lockfile; patch and minor updates come as one grouped PR, once
+   a release is three days old), the
    Node base image tag and digest (new Node majors are ignored, the next LTS is
    a deliberate change), and the GitHub Actions (pinned by commit SHA).
+   Dependabot security updates are on as well; their PRs for vulnerable
+   transitive npm packages take the same path.
 2. **CI** on the PR: hadolint, shellcheck, image build, `test/smoke.sh`, and a
    Grype scan that fails on fixable critical findings and lists the rest in the
    run summary. Accept a finding by adding it to a `.grype.yaml` ignore list.
