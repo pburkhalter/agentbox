@@ -1,0 +1,11 @@
+#!/bin/bash
+# cli-bridge: an OpenAI-compatible HTTP API in front of the logged-in CLIs
+# (/usr/local/lib/agentbox/cli-bridge). Off unless AGENTBOX_CLI_BRIDGE=1:
+# init marks the service down otherwise. Refuses to start without a token.
+set -uo pipefail
+# shellcheck disable=SC2034 # read by log() in lib.sh
+SVC=cli-bridge
+# shellcheck source=../../lib.sh
+. /usr/local/lib/agentbox/lib.sh
+exec 2>&1
+exec python3 -I /usr/local/lib/agentbox/cli-bridge/main.py serve

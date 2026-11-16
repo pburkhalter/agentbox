@@ -1,0 +1,10 @@
+#!/bin/sh
+# s6 passes the exit code ($1, 256 when killed by a signal). 78 is a
+# configuration error (no token, bad value): stay down until it is fixed and
+# the container restarts, or `agentbox restart cli-bridge`. Other failures
+# back off like the other services.
+if [ "$1" = 78 ]; then
+	echo "[agentbox/cli-bridge] configuration error; the service stays down (fix it, then: agentbox restart cli-bridge)" >&2
+	exec s6-svc -d "${AGENTBOX_SCANDIR:-/tmp/agentbox/service}/cli-bridge"
+fi
+[ "$1" = 0 ] || [ "$1" = 256 ] || sleep 10

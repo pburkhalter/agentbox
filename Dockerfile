@@ -78,6 +78,8 @@ RUN apt-get update \
  && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
 COPY rootfs/ /
+# cli-bridge's bytecode, compiled once here: the agent user cannot write it.
+RUN python3 -m compileall -q /usr/local/lib/agentbox/cli-bridge
 
 ENV HOME=/home/agent \
     PATH=/usr/local/lib/agentbox/bin:/opt/agentbox/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
@@ -97,7 +99,8 @@ LABEL org.opencontainers.image.title="agentbox" \
 USER ${AGENT_UID}:${AGENT_GID}
 WORKDIR /workspace
 VOLUME ["/home/agent", "/workspace"]
-EXPOSE 3001
+# 3001 CloudCLI; 3002 cli-bridge, which only listens when enabled.
+EXPOSE 3001 3002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["/usr/local/lib/agentbox/healthcheck"]

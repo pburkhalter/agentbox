@@ -29,3 +29,11 @@ services:
     #   CLAUDE_RC_ARGS: "--spawn same-dir --permission-mode default"
     #   AGENTBOX_CLAUDE_RC: "1" # 0 = no Claude Remote Control service
     #   AGENTBOX_CODEX_RC: "1"  # 0 = no Codex remote control service
+    #
+    # cli-bridge, an OpenAI-compatible API on port 3002 that answers with the
+    # bridge's own CLI logins (README: cli-bridge). Off unless all of these:
+    #   AGENTBOX_CLI_BRIDGE: "1"
+    #   AGENTBOX_CLI_BRIDGE_TOKEN: "..."   # openssl rand -hex 32, or _TOKEN_FILE
+    #   AGENTBOX_CLI_BRIDGE_CLAUDE: "1"    # and/or AGENTBOX_CLI_BRIDGE_CODEX
+    # and publish it like 3001, on the LAN address only:
+    #   ports: ["192.168.1.10:3001:3001", "192.168.1.10:3002:3002"]
