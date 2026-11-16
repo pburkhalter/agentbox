@@ -243,7 +243,10 @@ chat() {
 }
 # expect STATUS [JQ-FILTER] (after chat): status matches and the body passes the filter.
 expect() { test "$status" = "$1" && jq -e "${2:-.}" "$work/body" >/dev/null; }
-sse_text() { grep '^data: {' "$work/body" | sed 's/^data: //' | jq -rj '.choices[0].delta.content // empty'; }
+sse_json() { sed -n 's/^data: \({.*\)$/\1/p' "$work/body"; }
+sse_text() { sse_json | jq -rj '.choices[0].delta.content // empty'; }
+export work
+export -f sse_json
 
 check "/health without a token says only ok" bash -c "curl -fsS $api/health | jq -e '.status == \"ok\" and .adapters == null'"
 check "/health with the token shows both adapters logged in" \
@@ -263,8 +266,8 @@ for m in claude/sonnet codex; do
 	status=$(chat "$m" "say hi" '{"stream": true, "stream_options": {"include_usage": true}}')
 	check "$m: streaming answer in SSE chunks" test "$status:$(sse_text)" = "200:Hello from the stub."
 	check "$m: stream ends with finish_reason, usage chunk, [DONE]" bash -c "
-		grep '^data: {' $work/body | tail -2 | head -1 | jq -e '.choices[0].finish_reason == \"stop\"' &&
-		grep '^data: {' $work/body | tail -1 | jq -e '.choices == [] and .usage.total_tokens > 0' &&
+		sse_json | tail -2 | head -1 | jq -e '.choices[0].finish_reason == \"stop\"' &&
+		sse_json | tail -1 | jq -e '.choices == [] and .usage.total_tokens > 0' &&
 		test \"\$(grep '^data:' $work/body | tail -1)\" = 'data: [DONE]'"
 done
 status=$(chat claude STUB:big)
@@ -327,11 +330,12 @@ check "history becomes a transcript, system and developer join the system prompt
 start=$(date +%s)
 status=$(chat claude STUB:hang)
 check "timeout: 504 after the configured 6 s" bash -c "test $status = 504 && test $(($(date +%s) - start)) -lt 15"
-check "timeout: the CLI's whole process group is gone" in_c_b '! pgrep -f "sleep 987"'
+# (98[7]: the pattern must not match the shell that runs pgrep)
+check "timeout: the CLI's whole process group is gone" in_c_b '! pgrep -f "sleep 98[7]"'
 curl -s -o /dev/null --max-time 2 "${auth[@]}" --data-binary '{"model":"codex","messages":[{"role":"user","content":"STUB:hang"}]}' \
 	"$api/v1/chat/completions" || true
 sleep 1
-check "a client that hangs up stops the CLI" in_c_b '! pgrep -f "sleep 987"'
+check "a client that hangs up stops the CLI" in_c_b '! pgrep -f "sleep 98[7]"'
 check "and is logged as 499" bash -c "docker logs $b 2>&1 | grep -q '499 POST /v1/chat/completions.*error=client_closed'"
 
 slow='{"model":"claude","messages":[{"role":"user","content":"STUB:slow"}]}'
@@ -348,7 +352,7 @@ status=$(chat claude STUB:write)
 check "files a CLI leaves in the work directory are removed and logged" \
 	bash -c "test $status = 200 && docker logs $b 2>&1 | grep -q 'left files in its working directory, removed: stray.txt'"
 check "work and per-call directories are empty afterwards" \
-	in_c_b 'test -z "$(ls -A /tmp/agentbox/cli-bridge/work /tmp/agentbox/cli-bridge/calls)"'
+	in_c_b 'test -z "$(ls -A /tmp/agentbox/cli-bridge/work)" && test -z "$(ls -A /tmp/agentbox/cli-bridge/calls)"'
 check "one log line per request with adapter, model, duration, tokens" \
 	bash -c "docker logs $b 2>&1 | grep -q '200 POST /v1/chat/completions .*adapter=codex model=codex .*duration=.*prompt_tokens=11'"
 check "logs carry neither prompts nor answers" \
@@ -363,18 +367,28 @@ check "a logged-out adapter disappears from /v1/models" bash -c "curl -fsS -H 'A
 status=$(chat claude/sonnet hi)
 check "a logged-out adapter: 401 not_logged_in" expect 401 '.error.code == "not_logged_in"'
 docker exec "$b" rm "$state/claude/.stub-logged-out"
-status=$(chat codex STUB:auth)
-check "a login the CLI rejects mid-call: 401 not_logged_in" expect 401 '.error.code == "not_logged_in"'
+# A fresh start forgets the cached "logged out", so the calls below really run.
+docker exec "$b" agentbox restart cli-bridge
+sleep 2
+wait_for curl -fsS "$api/health" || bad "the bridge answers after the second restart"
 
 echo "== cli-bridge with the real CLIs (no logins)"
+# show: what the real CLI answered, for the CI log
+show() { printf '     -> %s %s\n' "$status" "$(head -c 400 "$work/body")"; }
 status=$(chat claude 'STUB:real Say hi')
-check "real claude takes every bridge flag; without a login: 401" expect 401 '.error.code == "not_logged_in"'
+show
+# The message comes from Claude Code's own output, not from the bridge's
+# login cache: the real binary ran with every bridge flag.
+check "real claude takes every bridge flag; without a login: 401" \
+	expect 401 '.error.code == "not_logged_in" and (.error.message | startswith("Claude Code is not logged in ("))'
 docker exec -d "$b" python3 -I /test/fake_responses.py 18080 /tmp/fake-responses.jsonl
 sleep 1
 status=$(chat codex 'STUB:real Say hi' '{"reasoning_effort": "low"}')
+show
 check "real codex takes every bridge flag and answers through the fake API" \
 	expect 200 '.choices[0].message.content == "Hello from the fake Responses API." and .usage.prompt_tokens == 11'
 docker exec "$b" cat /tmp/fake-responses.jsonl >"$work/fake.jsonl" 2>/dev/null || true
+[ "$status" = 200 ] || docker logs "$b" 2>&1 | grep 'cli-bridge' | tail -5 | sed 's/^/     /'
 check "codex sent only the bridge's system prompt and the prompt" jq -se '
 	[.[] | select(.path | endswith("/responses")) | .body.input[] | select(.type == "message")
 	 | {role, text: .content[0].text}] == [{role: "developer", text: "You are a helpful assistant."},
@@ -384,6 +398,8 @@ check "codex offered no tool beyond apply_patch / its JavaScript cell" jq -se '
 	[.[] | .body | ((.tools // []) | names), (.input[] | select(.type == "additional_tools") | .tools | names)]
 	| . - ["apply_patch", "exec", "wait"] == []' "$work/fake.jsonl"
 check "codex used the requested reasoning effort" jq -se '[.[] | .body.reasoning.effort] | index("low")' "$work/fake.jsonl"
+status=$(chat codex STUB:auth)
+check "a login the CLI rejects mid-call: 401 not_logged_in" expect 401 '.error.code == "not_logged_in"'
 
 # Everything any of the calls above wrote, stubs and real CLIs alike.
 docker exec "$b" find /home/agent /workspace /tmp -xdev -newer /tmp/smoke-marker ! -type d >"$work/written" 2>/dev/null || true
@@ -409,7 +425,9 @@ check "and stays down instead of restarting" bash -c "
 check "port 3002 stays closed" docker exec "$c-notoken" bash -c '! curl -s -o /dev/null --max-time 2 http://127.0.0.1:3002/health'
 
 echo "== unit tests (the image's Python)"
-if docker run --rm --entrypoint python3 -v "$repo/test:/test:ro" --tmpfs /tmp:exec "$image" \
+# --init: a reaper as PID 1, as s6-svscan is in the real container (killed
+# children must not linger as zombies).
+if docker run --rm --init --entrypoint python3 -v "$repo/test:/test:ro" --tmpfs /tmp:exec "$image" \
 	-I -m unittest discover -s /test/unit >"$work/unit.log" 2>&1; then
 	ok "unit tests pass ($(grep -Eo 'Ran [0-9]+ tests' "$work/unit.log"))"
 else

@@ -159,7 +159,7 @@ class ClaudeParser(Parser):
         output = "\n".join(self.plain + [stderr])
         tail = last_line(output)
         if "not logged in" in output.lower() or "/login" in output:
-            return [Fail(errors.not_logged_in(f"Claude Code is not logged in; {LOGIN_HINT}"))]
+            return [Fail(errors.not_logged_in(f"Claude Code is not logged in ({tail}); {LOGIN_HINT}"))]
         return [Fail(errors.cli_failed(f"claude exited with status {returncode} without a result" + (f": {tail}" if tail else "")))]
 
 
