@@ -1,11 +1,25 @@
 #!/bin/bash
-# Test stand-in: reports a login, and `app-server` just stays up.
+# Test stand-in: reports a login (unless the config directory holds
+# .stub-logged-out), `app-server` just stays up, `exec` (as cli-bridge runs
+# it) is answered by stub_cli.py and `debug models` lists a small catalog.
+# Everything else goes to the real CLI.
 if [ "${1:-} ${2:-}" = "login status" ]; then
+	if [ -e "${CODEX_HOME:-$HOME/.codex}/.stub-logged-out" ]; then
+		echo "Not logged in"
+		exit 1
+	fi
 	echo "Logged in using ChatGPT"
 	exit 0
 fi
 if [ "${1:-}" = app-server ]; then
 	echo "stub codex $*"
 	exec sleep infinity
+fi
+if [ "${1:-}" = exec ]; then
+	exec python3 -I "$(dirname "$0")/stub_cli.py" codex "$@"
+fi
+if [ "${1:-} ${2:-}" = "debug models" ]; then
+	echo '{"models": [{"slug": "gpt-stub-1", "visibility": "list"}, {"slug": "gpt-stub-hidden", "visibility": "hide"}]}'
+	exit 0
 fi
 exec /opt/agentbox/node_modules/.bin/codex "$@"

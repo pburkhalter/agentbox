@@ -1,7 +1,8 @@
 #!/bin/bash
 # PID 1 of the container. Checks the environment, prepares the two volumes
 # (a fresh, empty one works) and hands over to s6-svscan, which supervises
-# cloudcli, claude-rc and codex-rc and reaps orphaned processes.
+# cloudcli, claude-rc, codex-rc and (when enabled) cli-bridge and reaps
+# orphaned processes.
 set -euo pipefail
 # shellcheck source=lib.sh
 . /usr/local/lib/agentbox/lib.sh
@@ -69,6 +70,8 @@ for src in /usr/local/lib/agentbox/services/*/; do
 done
 [ "${AGENTBOX_CLAUDE_RC:-1}" = 1 ] || { touch "$AGENTBOX_SCANDIR/claude-rc/down"; log "claude-rc disabled (AGENTBOX_CLAUDE_RC=${AGENTBOX_CLAUDE_RC})"; }
 [ "${AGENTBOX_CODEX_RC:-1}" = 1 ] || { touch "$AGENTBOX_SCANDIR/codex-rc/down"; log "codex-rc disabled (AGENTBOX_CODEX_RC=${AGENTBOX_CODEX_RC})"; }
+# Off unless asked for: it opens a port that spends the subscriptions.
+[ "${AGENTBOX_CLI_BRIDGE:-0}" = 1 ] || touch "$AGENTBOX_SCANDIR/cli-bridge/down"
 
 log "claude $(claude --version 2>/dev/null | cut -d' ' -f1), $(codex --version 2>/dev/null), cloudcli $(cloudcli --version 2>/dev/null)"
 exec s6-svscan "$AGENTBOX_SCANDIR"

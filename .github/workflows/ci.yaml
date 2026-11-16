@@ -22,6 +22,13 @@ jobs:
           mapfile -t scripts < <(grep -rlE '^#!/(usr/)?bin/(env )?(ba)?sh|^# shellcheck shell=' rootfs test)
           shellcheck --version | head -2
           shellcheck -x "${scripts[@]}"
+      # cli-bridge is standard-library Python; the smoke test runs the same
+      # tests again with the image's interpreter.
+      - name: cli-bridge unit tests
+        run: |
+          python3 --version
+          python3 -W error -m compileall -q rootfs/usr/local/lib/agentbox/cli-bridge test
+          python3 -m unittest discover -s test/unit
 
   image:
     runs-on: ubuntu-latest

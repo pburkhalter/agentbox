@@ -1,7 +1,13 @@
 #!/bin/bash
-# Test stand-in: reports a login, and `remote-control` waits for an answer
-# like the real first run does. Everything else goes to the real CLI.
+# Test stand-in: reports a login (unless the config directory holds
+# .stub-logged-out), `remote-control` waits for an answer like the real first
+# run does, and print mode (-p, as cli-bridge runs it) is answered by
+# stub_cli.py. Everything else goes to the real CLI.
 if [ "${1:-} ${2:-}" = "auth status" ]; then
+	if [ -e "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.stub-logged-out" ]; then
+		echo '{"loggedIn": false}'
+		exit 1
+	fi
 	echo '{"loggedIn": true}'
 	exit 0
 fi
@@ -10,5 +16,8 @@ if [ "${1:-}" = remote-control ]; then
 	read -r -p "Enable Remote Control? (y/n) " answer
 	echo "answer: $answer"
 	exit 3
+fi
+if [ "${1:-}" = -p ]; then
+	exec python3 -I "$(dirname "$0")/stub_cli.py" claude "$@"
 fi
 exec /opt/agentbox/node_modules/.bin/claude "$@"
